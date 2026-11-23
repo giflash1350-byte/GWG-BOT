@@ -1,43 +1,38 @@
-# GWG BOT
+# GWG MINI
 
-Bot trò chơi Discord bằng **Node.js 20**, **discord.js v14** và **SQLite**. Toàn bộ lệnh và phản hồi trong game bằng tiếng Việt. Bot chỉ dùng prefix chữ `g` (ví dụ `ghelp`, `ghunt`, `gbattle`); không có slash command và không cần dấu `!`.
+Bot game Discord tiếng Việt, chạy bằng **Node.js 20+**, **discord.js v14** và **SQLite**. Dùng duy nhất prefix chữ `g`: không dùng dấu `!`, không có Slash Commands.
 
-## Cài đặt
+## Cài đặt và khởi chạy
 
-1. Cài Node.js 20 trở lên.
-2. Tạo ứng dụng/bot trong Discord Developer Portal, mời bot vào máy chủ với quyền đọc/gửi tin nhắn và bật **Message Content Intent** trong mục Bot.
-3. Sao chép `.env.example` thành `.env`, điền token bot:
-
-   ```env
-   DISCORD_TOKEN=token_cua_bot
-   DATABASE_PATH=./data/gwg.sqlite
-   ```
-
-4. Cài dependency và chạy:
+1. Cài Node.js 20 trở lên từ trang chính thức của Node.js.
+2. Tạo bot trong Discord Developer Portal, mời bot vào máy chủ với quyền xem/gửi tin nhắn.
+3. Trong Developer Portal, vào **Bot → Privileged Gateway Intents** và bật **Message Content Intent**. Đây là quyền cần thiết để bot đọc lệnh dạng tin nhắn như `ghelp`.
+4. Trong thư mục dự án, sao chép `.env.example` thành `.env` (Windows: `copy .env.example .env`; macOS/Linux: `cp .env.example .env`), mở `.env` và dán token vào `DISCORD_TOKEN=`. Để `PREFIX=g`. File `.env` đã được `.gitignore` loại trừ; không commit token.
+5. Cài và chạy:
 
    ```bash
    npm install
    npm run check
+   npm test
    npm start
    ```
 
-`better-sqlite3` có thể cần công cụ build C/C++ phù hợp hệ điều hành nếu không có binary cài sẵn. Cơ sở dữ liệu được tạo tự động; không commit `.env` hoặc file SQLite.
+`better-sqlite3` tự tạo thư mục `data` và file SQLite ở lần chạy đầu. Nếu thiếu token, bot in hướng dẫn tiếng Việt. Không cần nhập token trong code.
 
 ## Lệnh
 
-- `ghelp`, `gprofile`, `gbalance`, `gleaderboard`
-- `gdaily`, `gwork`
-- `ghunt`, `gfishing` (hoặc `gfish`), `gadventure [1-3]`
-- `gbattle` đấu quái; `gbattle @người_chơi` đấu PvP
-- `gzoo`, `gpet adopt [1-3]`, `gpet active <id>`
-- `ginventory`, `gshop`, `gbuy <id> [số_lượng]`, `gsell <id> [số_lượng]`, `guse potion`
-- `gquest`, `gquest claim <hunt|fish|battle>`
+- `ghelp` — hướng dẫn; `gstart` — bắt đầu và nhận 100 GWG Coin.
+- `gbalance` — số dư, cấp độ, XP; `gdaily` — thưởng ngày và chuỗi điểm danh.
+- `ghunt` — săn thú; `gzoo` — bộ sưu tập (tối đa 30 con hiển thị).
+- `gbattle` — chiến đấu quái vật; sức mạnh tăng theo cấp và thú đã bắt.
+- `gfish` — câu cá; có thể bán cá ở `gsell`.
+- `gwork` — làm việc kiếm tiền; `gshop` — xem hàng; `gbuy bait [số lượng]` / `gbuy potion [số lượng]` — mua vật phẩm.
+- `ginventory` — túi đồ; `gsell <fish|salmon|tuna|pearl|bait> [số lượng]` — bán vật phẩm.
+- `gquest` — xem nhiệm vụ hằng ngày; `gquest claim <hunt|fish|battle|work>` — nhận thưởng.
+- `gleaderboard` — bảng xếp hạng GWG Coin trong máy chủ.
 
-## Gameplay
+Săn thú có bốn độ hiếm: **Thường, Hiếm, Sử thi, Huyền thoại**. Thú được lưu riêng theo người chơi và máy chủ. Câu cá, thú, vật phẩm, xu, cấp độ, nhiệm vụ và hồi chiêu được lưu bền vững qua khởi động lại. Mọi giao dịch mua/bán kiểm tra số dư/tồn kho trong SQLite transaction; số dư không thể âm.
 
-- Hồ sơ, xu, cấp độ, XP, điểm danh liên tiếp và bảng xếp hạng được lưu theo máy chủ trong SQLite.
-- Săn bắt, câu cá, chiến đấu, thám hiểm, cửa hàng, mua/bán, túi đồ và nhiệm vụ ngày.
-- Thu thập tối đa 10 thú cưng; chọn thú đồng hành để tăng sức mạnh, tích lũy XP và lên cấp.
-- Cooldown được lưu bền vững qua lần khởi động lại. PvP thưởng xu và có mức cược giới hạn.
+## Kiểm tra nhanh
 
-Đây là nền tảng gameplay độc lập lấy cảm hứng từ dòng bot nuôi thú/phiêu lưu; không dùng thương hiệu, nội dung độc quyền hay tài sản của OwO.
+`npm run check` kiểm tra cú pháp JavaScript. `npm test` chạy bộ kiểm thử tự động. Khi khởi động, log xác nhận đăng nhập Discord; nếu token sai/thiếu quyền, thông báo nêu hướng khắc phục. Hãy thử `gstart`, `gbalance`, `ghunt`, `gzoo`, `gfish`, `gshop` trong máy chủ.

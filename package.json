@@ -1,13 +1,14 @@
 {
-  "name": "gwg-bot",
+  "name": "gwg-mini",
   "version": "1.0.0",
-  "description": "GWG BOT - bot game Discord tiếng Việt với săn bắt, thú cưng, chiến đấu và kinh tế.",
-  "main": "src/index.js",
+  "description": "GWG MINI - bot game Discord tiếng Việt dùng prefix g, discord.js v14 và SQLite.",
+  "main": "index.js",
   "type": "commonjs",
   "scripts": {
-    "start": "node src/index.js",
-    "dev": "node --watch src/index.js",
-    "check": "node --check src/index.js && node --check src/db.js && node --check src/commands.js"
+    "start": "node index.js",
+    "dev": "node --watch index.js",
+    "check": "node --check index.js && node --check database.js && node --check commands/index.js && node --check systems/game.js",
+    "test": "node --test"
   },
   "engines": { "node": ">=20.0.0" },
   "dependencies": {

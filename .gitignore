@@ -1,6 +1,9 @@
-# Không đưa bí mật hoặc dữ liệu runtime lên GitHub
-node_modules/
+# Không commit token hoặc cấu hình riêng
 .env
+node_modules/
+data/*.sqlite
+data/*.sqlite-shm
+data/*.sqlite-wal
 *.sqlite
 *.sqlite-shm
 *.sqlite-wal
