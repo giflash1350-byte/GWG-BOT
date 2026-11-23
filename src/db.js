@@ -70,7 +70,6 @@ const statements = {
   ensureUser: db.prepare('INSERT OR IGNORE INTO users (guild_id, user_id) VALUES (?, ?)'),
   user: db.prepare('SELECT * FROM users WHERE guild_id = ? AND user_id = ?'),
   addCoins: db.prepare('UPDATE users SET coins = MAX(0, coins + ?) WHERE guild_id = ? AND user_id = ?'),
-  setCoins: db.prepare('UPDATE users SET coins = ? WHERE guild_id = ? AND user_id = ?'),
   addXp: db.prepare('UPDATE users SET xp = xp + ? WHERE guild_id = ? AND user_id = ?'),
   setLevelXp: db.prepare('UPDATE users SET level = ?, xp = ? WHERE guild_id = ? AND user_id = ?'),
   daily: db.prepare('UPDATE users SET last_daily = ?, streak = ? WHERE guild_id = ? AND user_id = ?'),
@@ -84,6 +83,7 @@ const statements = {
     ON CONFLICT(guild_id, user_id, action) DO UPDATE SET expires_at = excluded.expires_at`),
   pets: db.prepare('SELECT * FROM pets WHERE guild_id = ? AND user_id = ? ORDER BY active DESC, id'),
   activePet: db.prepare('SELECT * FROM pets WHERE guild_id = ? AND user_id = ? AND active = 1 LIMIT 1'),
+  ownedPet: db.prepare('SELECT id FROM pets WHERE guild_id = ? AND user_id = ? AND id = ?'),
   petCount: db.prepare('SELECT COUNT(*) AS count FROM pets WHERE guild_id = ? AND user_id = ?'),
   addPet: db.prepare('INSERT INTO pets (guild_id, user_id, name, species, power, active) VALUES (?, ?, ?, ?, ?, ?)'),
   setPetActive: db.prepare('UPDATE pets SET active = 0 WHERE guild_id = ? AND user_id = ?'),
@@ -91,7 +91,7 @@ const statements = {
   petXp: db.prepare('UPDATE pets SET xp = xp + ? WHERE id = ?'),
   petLevel: db.prepare('UPDATE pets SET level = ?, xp = ?, power = ? WHERE id = ?'),
   leaderboard: db.prepare('SELECT user_id, coins, level FROM users WHERE guild_id = ? ORDER BY coins DESC, level DESC LIMIT 10'),
-  ensureQuest: db.prepare(`INSERT OR IGNORE INTO quests (guild_id, user_id, day, quest_type, target, reward) VALUES (?, ?, ?, ?, ?, ?)`),
+  ensureQuest: db.prepare('INSERT OR IGNORE INTO quests (guild_id, user_id, day, quest_type, target, reward) VALUES (?, ?, ?, ?, ?, ?)'),
   quests: db.prepare('SELECT * FROM quests WHERE guild_id = ? AND user_id = ? AND day = ? ORDER BY quest_type'),
   questProgress: db.prepare('UPDATE quests SET progress = MIN(target, progress + ?) WHERE guild_id = ? AND user_id = ? AND day = ? AND quest_type = ?'),
   claimQuest: db.prepare('UPDATE quests SET claimed = 1 WHERE guild_id = ? AND user_id = ? AND day = ? AND quest_type = ? AND progress >= target AND claimed = 0')
@@ -101,14 +101,20 @@ function ensureUser(guildId, userId) {
   statements.ensureUser.run(guildId, userId);
   return statements.user.get(guildId, userId);
 }
-function addCoins(guildId, userId, amount) { statements.addCoins.run(Math.trunc(amount), guildId, userId); }
+function addCoins(guildId, userId, amount) {
+  statements.addCoins.run(Math.trunc(amount), guildId, userId);
+}
 function addXp(guildId, userId, amount) {
   statements.addXp.run(Math.max(0, Math.trunc(amount)), guildId, userId);
   const user = statements.user.get(guildId, userId);
   let level = user.level;
   let xp = user.xp;
   let leveled = 0;
-  while (xp >= level * 100) { xp -= level * 100; level += 1; leveled += 1; }
+  while (xp >= level * 100) {
+    xp -= level * 100;
+    level += 1;
+    leveled += 1;
+  }
   if (leveled) statements.setLevelXp.run(level, xp, guildId, userId);
   return { level, leveled };
 }
@@ -116,10 +122,9 @@ function addItem(guildId, userId, itemId, quantity = 1) {
   if (quantity > 0) statements.addItem.run(guildId, userId, itemId, Math.trunc(quantity));
 }
 function removeItem(guildId, userId, itemId, quantity = 1) {
-  return statements.removeItem.run(Math.trunc(quantity), guildId, userId, itemId, Math.trunc(quantity)).changes > 0;
-}
-function itemCount(guildId, userId, itemId) {
-  return statements.inventory.get(guildId, userId, itemId)?.quantity || 0;
+  const count = Math.trunc(quantity);
+  if (count < 1) return false;
+  return statements.removeItem.run(count, guildId, userId, itemId, count).changes > 0;
 }
 function cooldownRemaining(guildId, userId, action) {
   const expires = statements.cooldown.get(guildId, userId, action)?.expires_at || 0;
@@ -132,17 +137,18 @@ function addPet(guildId, userId, name, species, power, active = 0) {
   return statements.addPet.run(guildId, userId, name, species, power, active).lastInsertRowid;
 }
 function dailyQuests(guildId, userId, day) {
-  const definitions = [
-    ['hunt', 3, 80], ['fish', 2, 70], ['battle', 1, 100]
-  ];
-  for (const [type, target, reward] of definitions) statements.ensureQuest.run(guildId, userId, day, type, target, reward);
+  for (const [type, target, reward] of [['hunt', 3, 80], ['fish', 2, 70], ['battle', 1, 100]]) {
+    statements.ensureQuest.run(guildId, userId, day, type, target, reward);
+  }
   return statements.quests.all(guildId, userId, day);
 }
 function progressQuest(guildId, userId, type, amount = 1, day = new Date().toISOString().slice(0, 10)) {
-  statements.questProgress.run(amount, guildId, userId, day, type);
+  statements.questProgress.run(Math.max(0, Math.trunc(amount)), guildId, userId, day, type);
 }
 
-const transaction = db.transaction((guildId, userId, targetId, winnerId, loserId) => {
+// Chỉ chuyển xu giữa hai người chơi hợp lệ; thao tác và số dư cược được bảo vệ trong một transaction.
+const battleTransaction = db.transaction((guildId, winnerId, loserId) => {
+  if (winnerId === loserId) return 0;
   const winner = statements.user.get(guildId, winnerId);
   const loser = statements.user.get(guildId, loserId);
   if (!winner || !loser) return 0;
@@ -153,31 +159,48 @@ const transaction = db.transaction((guildId, userId, targetId, winnerId, loserId
   }
   return wager;
 });
-function transferBattleCoins(guildId, winnerId, loserId) { return transaction(guildId, winnerId, loserId, winnerId, loserId); }
+
+const activatePetTransaction = db.transaction((guildId, userId, petId) => {
+  // Xác thực quyền sở hữu trước khi bỏ thú đồng hành hiện tại.
+  if (!statements.ownedPet.get(guildId, userId, petId)) return false;
+  statements.setPetActive.run(guildId, userId);
+  return statements.activatePet.run(guildId, userId, petId).changes > 0;
+});
 
 module.exports = {
-  db, ensureUser, addCoins, addXp, addItem, removeItem, itemCount,
-  inventoryList: (g, u) => statements.inventoryList.all(g, u),
-  cooldownRemaining, setCooldown,
-  pets: (g, u) => statements.pets.all(g, u),
-  activePet: (g, u) => statements.activePet.get(g, u),
-  petCount: (g, u) => statements.petCount.get(g, u).count,
+  db,
+  ensureUser,
+  addCoins,
+  addXp,
+  addItem,
+  removeItem,
+  itemCount: (guildId, userId, itemId) => statements.inventory.get(guildId, userId, itemId)?.quantity || 0,
+  inventoryList: (guildId, userId) => statements.inventoryList.all(guildId, userId),
+  cooldownRemaining,
+  setCooldown,
+  pets: (guildId, userId) => statements.pets.all(guildId, userId),
+  activePet: (guildId, userId) => statements.activePet.get(guildId, userId),
+  petCount: (guildId, userId) => statements.petCount.get(guildId, userId).count,
   addPet,
-  activatePet(g, u, id) { statements.setPetActive.run(g, u); return statements.activatePet.run(g, u, id).changes > 0; },
-  grantPetXp(g, u, amount) {
-    const pet = statements.activePet.get(g, u);
+  activatePet: activatePetTransaction,
+  grantPetXp(guildId, userId, amount) {
+    const pet = statements.activePet.get(guildId, userId);
     if (!pet) return null;
-    statements.petXp.run(amount, pet.id);
+    statements.petXp.run(Math.max(0, Math.trunc(amount)), pet.id);
     const updated = db.prepare('SELECT * FROM pets WHERE id = ?').get(pet.id);
     let level = updated.level;
     let xp = updated.xp;
-    while (xp >= level * 50) { xp -= level * 50; level += 1; }
+    while (xp >= level * 50) {
+      xp -= level * 50;
+      level += 1;
+    }
     if (level !== updated.level) statements.petLevel.run(level, xp, pet.power + (level - pet.level), pet.id);
     return { level, leveled: level > pet.level };
   },
-  leaderboard: (g) => statements.leaderboard.all(g),
-  dailyQuests, progressQuest,
-  claimQuest(g, u, day, type) { return statements.claimQuest.run(g, u, day, type).changes > 0; },
-  claimDaily(g, u, day, streak) { statements.daily.run(day, streak, g, u); },
-  transferBattleCoins
+  leaderboard: (guildId) => statements.leaderboard.all(guildId),
+  dailyQuests,
+  progressQuest,
+  claimQuest: (guildId, userId, day, type) => statements.claimQuest.run(guildId, userId, day, type).changes > 0,
+  claimDaily: (guildId, userId, day, streak) => statements.daily.run(day, streak, guildId, userId),
+  transferBattleCoins: (guildId, winnerId, loserId) => battleTransaction(guildId, winnerId, loserId)
 };
