@@ -1,0 +1,6 @@
+import {AttachmentBuilder,ActionRowBuilder,ButtonBuilder,ButtonStyle,EmbedBuilder} from 'discord.js';import {readFile} from 'node:fs/promises';import path from 'node:path';import {fileURLToPath} from 'node:url';
+const iconPath=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../../assets/gwg-currency.svg');
+export async function currencyAttachment(){return new AttachmentBuilder(await readFile(iconPath),{name:'gwg-currency.svg'});}
+export async function moneyEmbed(title,description,color=0xec4899){return new EmbedBuilder().setTitle(title).setDescription(description).setColor(color).setThumbnail('attachment://gwg-currency.svg');}
+export function boardRows(game,disabled=false){const rows=[];for(let row=0;row<3;row++){rows.push(new ActionRowBuilder().addComponents(...[0,1,2].map(col=>{const pos=row*3+col,opened=game.revealed.includes(pos);return new ButtonBuilder().setCustomId(`m:${game.id}:p:${pos}`).setLabel(opened?'✓':String(pos+1)).setStyle(opened?ButtonStyle.Success:ButtonStyle.Secondary).setDisabled(disabled||opened);})));}rows.push(new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`m:${game.id}:c`).setLabel('Cash Out').setStyle(ButtonStyle.Primary).setDisabled(disabled||!game.revealed.length)));return rows;}
+export {EmbedBuilder};
